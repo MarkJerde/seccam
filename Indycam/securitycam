@@ -17,4 +17,3 @@ chmod 666 ${name}-00000.rgb
 #echo
 #cat ${name}.jpg
 #rm -f ${name}*
-sleep 1
