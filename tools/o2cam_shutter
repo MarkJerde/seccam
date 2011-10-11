@@ -1,0 +1,139 @@
+#!/bin/sh
+
+# Commands to use to change shutter speed of O^2cam;  cantin, feb 2000.
+# Based on the equivalent indycam program I wrote in Oct 97.
+#
+# First argument to command is the speed (fraction thereof).  Possible
+# values are 60, 100, 125, 250, 500, 1000, 2000 and 4000 and 10000.  
+# Data is then fed into "vlmcd" to change the shutter speed.
+# 
+#
+# within vlmcd
+#
+#
+# from "vlinfo -l":
+#
+#    name of server:
+# number of devices on server:    1
+# 
+# device: mvp 0
+#         extensions = EXT_event_recv EXT_camera
+#         nodes = 13
+#         Device Controls, type = Device, kind = 0, number = 0
+#         SVideo Input, type = Source, kind = Video, number = 3
+#         Composite Video Input, type = Source, kind = Video, number = 2
+#         Camera Video Input, type = Source, kind = Video, number = 1
+#         Digital Video Input, type = Source, kind = Video, number = 4
+#         Loopback E Video Input, type = Source, kind = Video, number = 7
+#         Loopback F Video Input, type = Source, kind = Video, number = 8
+#         Screen Capture Input, type = Source, kind = Screen, number = 0
+#         Video Output, type = Drain, kind = Video, number = 0
+#         Memory Source, type = Source, kind = Memory, number = 0
+#         Memory Video Drain 0, type = Drain, kind = Memory, number = 0
+#         Memory Video Drain 1, type = Drain, kind = Memory, number = 1
+#         Memory Screen Drain, type = Drain, kind = Memory, number = 2
+# 
+# Info for path 00010000:
+# Number of controls: 203
+#                         
+# Control #87:
+#   Name:         camera shutter
+#   Type:         1447231568
+#   class:        List
+#   group:        Signal
+#   node:         Camera Video Input
+#   valueType:    Integer
+#   valueCount:   1
+#   #ranges:      0
+#   #items:       9
+#     1/60th Sec = 0
+#     1/100th Sec = 1
+#     1/125th Sec = 2
+#     1/250th Sec = 3
+#     1/500th Sec = 4
+#     1/1000th Sec = 5
+#     1/2000th Sec = 6
+#     1/4000th Sec = 7
+#     1/10000th Sec = 8             
+
+
+usage()
+{
+cat << eof
+
+     Usage:
+ 
+         `basename $0` speed
+
+     where "speed" is one the speed of the IndyCam shutter (1/speed).
+
+     Values are one of 60, 100, 125, 250, 500, 1000, 2000, 4000 and 10000.
+
+     `basename $0` will change the shutter speed of the IndyCam to
+     be inversely proportional to the number given (ex: if "250" is given
+     as a parameter, the IndyCam shutter speed will be changed to
+     be 1/250 seconds.
+
+eof
+}
+
+if [ $# -ne 1 ]
+then
+    usage
+    exit 1
+fi
+
+case $1 in 
+    60) SHUTTER_SPEED=0 ;;
+    100) SHUTTER_SPEED=1 ;;
+    125) SHUTTER_SPEED=2 ;;
+    250) SHUTTER_SPEED=3 ;;
+    500) SHUTTER_SPEED=4 ;;
+    1000) SHUTTER_SPEED=5 ;;
+    2000) SHUTTER_SPEED=6 ;;
+    4000) SHUTTER_SPEED=7 ;;
+    10000) SHUTTER_SPEED=8 ;;
+    *) echo "\nWrong selection." 
+       usage
+       exit 2
+esac
+
+#
+# Construct the command line to be sent to "vlcmd".  It will be made out
+# of the following commands:
+#
+#  openvideo
+#  getnode 1 source video 1
+#  getnode 2 drain memory 0
+#  createpath 4 0 1 2
+#  setuppaths 4 share share
+#  #getcontrol 1447231568 4 1
+
+CMD_LINE="openvideo; getnode 1 source video 1; getnode 2 drain memory 0 ;"
+CMD_LINE="$CMD_LINE createpath 4 0 1 2 ; setuppaths 4 share share ;"
+
+#
+# The next line includes the shutter speed specified on the command line.
+#
+CMD_LINE="$CMD_LINE setcontrol 1447231568 4 1 $SHUTTER_SPEED 0"
+
+#
+# call vlcmd and send in those values.
+#
+echo $CMD_LINE | vlcmd
+
+
+# The following section was how to get the brightness value from
+# the IndyCam;  did not work very well... :-(
+#
+##createpath 5 0 1 2
+##setuppaths 5 share share  
+##
+##>> getcontrol 1447624739 5 1
+##Control type: 1447624739
+##Fraction value = 235/255
+##Boolean value = 235
+##Integer value = 235
+##X value = 235   Y value = 255
+##>>     
+
