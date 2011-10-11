@@ -51,6 +51,22 @@ param_gain=1447624707
 param_shutter=1447624706
 param_brightness=1447624739
 
+# Control parameters
+control_brightness_min_usable=66
+control_brightness_min_desired=130
+control_brightness_max_desired=150
+control_brightness_max_usable=255
+control_min_gain=200
+control_max_gain=255
+control_gain_adjust_amount=5
+control_min_shutter=0
+control_max_shutter=8
+control_rest_count=5
+
+# Const parameters
+const_true=1
+const_false=0
+
 # Shutter speed (read immediately below)
 shutter_speed=7
 # Brightness level (read before use)
@@ -82,15 +98,14 @@ shutter_speed=`{
     echo quit
     } | /usr/sbin/vlcmd  | awk -F= '/^Integer value/ {print $2}'`
 echo $shutter_speed
-sleep 1
 
 # Loop indefinitely, evaluating brightness, taking five pictures, adjusting settings, taking five pictures, repeat.
-while [ 0 -eq 0 ]; do
+while [ $const_false -eq $const_false ]; do
     # Flag to indicate that brightness level is outside usable limits, requiring rest.
-    rest_count_needed=0
+    rest_count_needed=$const_false
     # Flags to indicate that shutter speed or gain level are to be changed.
-    change_speed_needed=0
-    change_gain_needed=0
+    change_speed_needed=$const_false
+    change_gain_needed=$const_false
 
     # Read brightness level from hardware.
     brightness_level=`{
@@ -114,53 +129,53 @@ while [ 0 -eq 0 ]; do
         echo quit
         } | /usr/sbin/vlcmd | awk -F= '/^Integer value/ {print $2}'`
 
-    if [ $warmup_countdown -ne 0 ]; then
+    if [ $warmup_countdown -ne $control_min_shutter ]; then
         # Do not make adjustments within warmup period.
         warmup_countdown=`echo $warmup_countdown - 1 | bc`
     else
         # Is brightness level above desired range?
-        if [ $brightness_level -gt 150 ]; then
+        if [ $brightness_level -gt $control_brightness_max_desired ]; then
             # Is gain level not minimum?
-            if [ $gain_level -ne 200 ]; then
+            if [ $gain_level -ne $control_min_gain ]; then
                 # Reduce gain and flag for update.
-                gain_level=`echo $gain_level - 5 | bc`
-                change_gain_needed=1
+                gain_level=`echo $gain_level - $control_gain_adjust_amount | bc`
+                change_gain_needed=$const_true
             else
                 # Can shutter speed be increased?
-                if [ $shutter_speed -ne 8 ]; then
+                if [ $shutter_speed -ne $control_max_shutter ]; then
                     # Increase shutter speed, increase gain level to maximum, and flag for update.
                     shutter_speed=`echo $shutter_speed + 1 | bc`
-                    gain_level=255
-                    change_speed_needed=1
+                    gain_level=$control_max_gain
+                    change_speed_needed=$const_true
                 else
                     # Is brightness level above usable limits?
-                    if [ $brightness_level -ge 255 ]; then
+                    if [ $brightness_level -ge $control_brightness_max_usable ]; then
                         # Flag for rest instead of taking pictures.
-                        rest_count_needed=5
+                        rest_count_needed=$control_rest_count
                     fi
                 fi
             fi
         fi
 
         # Is brightness level below desired range?
-        if [ $brightness_level -lt 130 ]; then
+        if [ $brightness_level -lt $control_brightness_min_desired ]; then
             # Is gain level not maximum?
-            if [ $gain_level -ne 255 ]; then
+            if [ $gain_level -ne $control_max_gain ]; then
                 # Increase gain and flag for update.
-                gain_level=`echo $gain_level + 5 | bc`
-                change_gain_needed=1
+                gain_level=`echo $gain_level + $control_gain_adjust_amount | bc`
+                change_gain_needed=$const_true
             else
                 # Can shutter speed be decreased?
-                if [ $shutter_speed -ne 0 ]; then
+                if [ $shutter_speed -ne $control_min_shutter ]; then
                     # Decrease shutter speed, decreased gain level to minimum, and flag for update.
                     shutter_speed=`echo $shutter_speed - 1 | bc`
-                    gain_level=200
-                    change_speed_needed=1
+                    gain_level=$control_min_gain
+                    change_speed_needed=$const_true
                 else
                     # Is brightness level below usable limits?
-                    if [ $brightness_level -lt 66 ]; then
+                    if [ $brightness_level -lt $control_brightness_min_usable ]; then
                         # Flag for rest instead of taking pictures.
-                        rest_count_needed=5
+                        rest_count_needed=$control_rest_count
                     fi
                 fi
             fi
@@ -168,7 +183,7 @@ while [ 0 -eq 0 ]; do
     fi
 
     echo "Level: $brightness_level"
-    if [ $rest_count_needed -ne 0 ]; then
+    if [ $rest_count_needed -ne $const_false ]; then
         # Sleep for a while if brightness level is outside usable limits.
         sleep $rest_count_needed
     else
@@ -181,7 +196,7 @@ while [ 0 -eq 0 ]; do
     fi
 
     brightness_level=nn
-    if [ $change_speed_needed -ne 0 ]; then
+    if [ $change_speed_needed -ne $const_false ]; then
         # If shutter speed change is requested.
 
         # Set shutter speed and gain level, get brightness level from hardware.
@@ -210,7 +225,7 @@ while [ 0 -eq 0 ]; do
             } | /usr/sbin/vlcmd | awk -F= '/^Integer value/ {print $2}'`
     else
         # If shutter speed change isn't requested.
-        if [ $change_gain_needed -ne 0 ]; then
+        if [ $change_gain_needed -ne $const_false ]; then
             # If gain level change is requested.
 
             # Set gain level, get brightness level from hardware.
@@ -238,7 +253,7 @@ while [ 0 -eq 0 ]; do
     fi
 
     echo "Level: $brightness_level Speed: $shutter_speed Gain: $gain_level"
-    if [ $rest_count_needed -ne 0 ]; then
+    if [ $rest_count_needed -ne $const_false ]; then
         # Sleep for a while if brightness level is outside usable limits.
         sleep $rest_count_needed
     else
