@@ -1,0 +1,20 @@
+#!/bin/sh
+name=`date | awk '{print($3":"$4)}'|awk -F: '{print($1"_"$2"_"$3"_"$4)}`
+#echo ${name}
+cd /usr/people/mjerde/securitycamout
+#/usr/sbin/vidtomem -f $name 1> /dev/null 2>&1
+#echo snap
+/usr/sbin/vidtomem -f $name
+#/usr/sbin/imgcopy ${name}-00000.rgb ${name}.jpg 1> /dev/null 2>&1
+#echo crackle
+chmod 666 ${name}-00000.rgb
+#/usr/sbin/imgcopy ${name}-00000.rgb ${name}.jpg
+#echo pop
+#rm -f ${name}-00000.rgb 1> /dev/null 2>&1
+#echo ching
+#mv ${name}.jpg /cdrom
+#echo Content-type: image/jpeg
+#echo
+#cat ${name}.jpg
+#rm -f ${name}*
+sleep 1
