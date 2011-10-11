@@ -43,25 +43,25 @@
 # adapted with bits from http://gold.sao.nrc.ca/~cantin/indycam/o2cam_shutter
 #
 # set up camera parameter enumerations, default Indy
-agc_enable=1447624704
-red_bal=1447624708
-blue_bal=1447624709
-saturation=1447624710
-gain=1447624707
-shutter=1447624706
-brightness=1447624739
+param_agc_enable=1447624704
+param_red_bal=1447624708
+param_blue_bal=1447624709
+param_saturation=1447624710
+param_gain=1447624707
+param_shutter=1447624706
+param_brightness=1447624739
 
 # Shutter speed (read immediately below)
-speed=7
+shutter_speed=7
 # Brightness level (read before use)
-level=255
+brightness_level=255
 # Gain level (never actually read.  Just set.  Don't know why.  It might just trim in fast enough)
-glevel=210
+gain_level=210
 # Prevent adjusting settings for n iterations of ten photos each. (don't remember why)
-warmup=0
+warmup_countdown=0
 
 # Set agc_enable (disable automatic gain control, most likely), get shutter speed from hardware.
-speed=`{
+shutter_speed=`{
         # setup
         echo openvideo
         echo getnode 0 source video 0
@@ -72,28 +72,28 @@ speed=`{
         echo setuppaths 0 share share
 
         # set agc_enable
-        echo setcontrol $agc_enable 0 0 0 1
+        echo setcontrol $param_agc_enable 0 0 0 1
 
         # get shutter speed
-        echo getcontrol $shutter 0 0
+        echo getcontrol $param_shutter 0 0
 
         # cleanup
         echo closevideo
         echo quit
         } | /usr/sbin/vlcmd  | awk -F= '/^Integer value/ {print $2}'`
-echo $speed
+echo $shutter_speed
 sleep 1
 
 # Loop indefinitely, evaluating brightness, taking five pictures, adjusting settings, taking five pictures, repeat.
 while [ 0 -eq 0 ]; do
 	# Flag to indicate that brightness level is outside usable limits, requiring rest.
-    rest=0
+    rest_count_needed=0
 	# Flags to indicate that shutter speed or gain level are to be changed.
-    cspeed=0
-    cgain=0
+    change_speed_needed=0
+    change_gain_needed=0
 
 	# Read brightness level from hardware.
-    level=`{
+    brightness_level=`{
         # setup
         echo openvideo
         echo getnode 0 source video 0
@@ -104,73 +104,73 @@ while [ 0 -eq 0 ]; do
         echo setuppaths 0 share share
 
         # set shutter speed
-        #echo setcontrol $shutter 0 0 $speed 0
+        #echo setcontrol $param_shutter 0 0 $shutter_speed 0
 
         # get brightness level
-        echo getcontrol $brightness 0 0
+        echo getcontrol $param_brightness 0 0
 
         # cleanup
         echo closevideo
         echo quit
     } | /usr/sbin/vlcmd | awk -F= '/^Integer value/ {print $2}'`
 
-    if [ $warmup -ne 0 ]; then
+    if [ $warmup_countdown -ne 0 ]; then
       # Do not make adjustments within warmup period.
-      warmup=`echo $warmup - 1 | bc`
+      warmup_countdown=`echo $warmup_countdown - 1 | bc`
     else
       # Is brightness level above desired range?
-      if [ $level -gt 150 ]; then
+      if [ $brightness_level -gt 150 ]; then
         # Is gain level not minimum?
-        if [ $glevel -ne 200 ]; then
+        if [ $gain_level -ne 200 ]; then
           # Reduce gain and flag for update.
-          glevel=`echo $glevel - 5 | bc`
-          cgain=1
+          gain_level=`echo $gain_level - 5 | bc`
+          change_gain_needed=1
         else
           # Can shutter speed be increased?
-          if [ $speed -ne 8 ]; then
+          if [ $shutter_speed -ne 8 ]; then
             # Increase shutter speed, increase gain level to maximum, and flag for update.
-            speed=`echo $speed + 1 | bc`
-            glevel=255
-            cspeed=1
+            shutter_speed=`echo $shutter_speed + 1 | bc`
+            gain_level=255
+            change_speed_needed=1
           else
             # Is brightness level above usable limits?
-            if [ $level -ge 255 ]; then
+            if [ $brightness_level -ge 255 ]; then
               # Flag for rest instead of taking pictures.
-              rest=5
+              rest_count_needed=5
             fi
           fi
         fi
       fi
 
       # Is brightness level below desired range?
-      if [ $level -lt 130 ]; then
+      if [ $brightness_level -lt 130 ]; then
         # Is gain level not maximum?
-        if [ $glevel -ne 255 ]; then
+        if [ $gain_level -ne 255 ]; then
           # Increase gain and flag for update.
-          glevel=`echo $glevel + 5 | bc`
-          cgain=1
+          gain_level=`echo $gain_level + 5 | bc`
+          change_gain_needed=1
         else
           # Can shutter speed be decreased?
-          if [ $speed -ne 0 ]; then
+          if [ $shutter_speed -ne 0 ]; then
             # Decrease shutter speed, decreased gain level to minimum, and flag for update.
-            speed=`echo $speed - 1 | bc`
-            glevel=200
-            cspeed=1
+            shutter_speed=`echo $shutter_speed - 1 | bc`
+            gain_level=200
+            change_speed_needed=1
           else
             # Is brightness level below usable limits?
-            if [ $level -lt 66 ]; then
+            if [ $brightness_level -lt 66 ]; then
               # Flag for rest instead of taking pictures.
-              rest=5
+              rest_count_needed=5
             fi
           fi
         fi
       fi
     fi
 
-    echo "Level: $level"
-    if [ $rest -ne 0 ]; then
+    echo "Level: $brightness_level"
+    if [ $rest_count_needed -ne 0 ]; then
       # Sleep for a while if brightness level is outside usable limits.
-      sleep $rest
+      sleep $rest_count_needed
     else
       # Take five pictures.
       /usr/people/mjerde/securitycam
@@ -180,12 +180,12 @@ while [ 0 -eq 0 ]; do
       /usr/people/mjerde/securitycam
     fi
 
-    level=nn
-    if [ $cspeed -ne 0 ]; then
+    brightness_level=nn
+    if [ $change_speed_needed -ne 0 ]; then
       # If shutter speed change is requested.
 
       # Set shutter speed and gain level, get brightness level from hardware.
-      level=`{
+      brightness_level=`{
           # setup
           echo openvideo
           echo getnode 0 source video 0
@@ -196,13 +196,13 @@ while [ 0 -eq 0 ]; do
           echo setuppaths 0 share share
 
           # set shutter speed
-          echo setcontrol $shutter 0 0 $speed 0
+          echo setcontrol $param_shutter 0 0 $shutter_speed 0
 
           # set gain level
-          echo setcontrol $gain 0 0 $glevel 255
+          echo setcontrol $param_gain 0 0 $gain_level 255
 
           # get brightness level
-          echo getcontrol $brightness 0 0
+          echo getcontrol $param_brightness 0 0
 
           # cleanup
           echo closevideo
@@ -210,11 +210,11 @@ while [ 0 -eq 0 ]; do
       } | /usr/sbin/vlcmd | awk -F= '/^Integer value/ {print $2}'`
     else
       # If shutter speed change isn't requested.
-      if [ $cgain -ne 0 ]; then
+      if [ $change_gain_needed -ne 0 ]; then
         # If gain level change is requested.
 
         # Set gain level, get brightness level from hardware.
-        level=`{
+        brightness_level=`{
             # setup
             echo openvideo
             echo getnode 0 source video 0
@@ -225,10 +225,10 @@ while [ 0 -eq 0 ]; do
             echo setuppaths 0 share share
 
             # set gain level
-            echo setcontrol $gain 0 0 $glevel 255
+            echo setcontrol $param_gain 0 0 $gain_level 255
 
             # get brightness level
-            echo getcontrol $brightness 0 0
+            echo getcontrol $param_brightness 0 0
 
             # cleanup
             echo closevideo
@@ -237,10 +237,10 @@ while [ 0 -eq 0 ]; do
       fi
     fi
 
-    echo "Level: $level Speed: $speed Gain: $glevel"
-    if [ $rest -ne 0 ]; then
+    echo "Level: $brightness_level Speed: $shutter_speed Gain: $gain_level"
+    if [ $rest_count_needed -ne 0 ]; then
       # Sleep for a while if brightness level is outside usable limits.
-      sleep $rest
+      sleep $rest_count_needed
     else
       # Take five pictures.
       /usr/people/mjerde/securitycam
