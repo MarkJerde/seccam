@@ -40,6 +40,18 @@ $current = "";
 $prevRes = 0;
 $checklumi = 0;
 $delay = 0;
+@average = ((),());
+for ( $i = 0; $i < 10; $i++ ) { $average[0][$i] = -20000; }
+for ( $i = 0; $i < 10; $i++ ) { $average[1][$i] = 0; }
+$avgCount = 0;
+$tagCount = 0;
+$avgSize = 30;
+$avgSet = 0;
+$devthreshold = 2.0;
+$delCurrent = 1;
+$streak = 0;
+$streakl = "";
+$streakt = "";
 
 sub atoi
 {
@@ -98,27 +110,6 @@ while ( 1 )
 			if ( !($perms =~ m/mjerde/) )
 			{
 				$next = "";
-			} elsif ( $checklumi )  {
-				$result = `compare -metric RMSE /tmp/indydump/00black.jpg $next /dev/null`;
-				if ( $result =~ m/([\d\.]+)\s*dB/ )
-				{
-					$result = atoi($1);
-					print "luminance next $next res $result\n";
-					if ( ($result >= $max) || ($result <= $min) )
-					{
-						if ( $result >= $max ) { print "ADJUST FASTER\n"; }
-						else { print "ADJUST SLOWER\n"; }
-						if ( $result >= $max ) { system "date >> lumilog";system "echo way up >> lumilog"; }
-						else { system "date >> lumilog";system "echo way down >> lumilog"; }
-						system("rm -f $next");
-						$next = "";
-					} else {
-						if ( $result >= $premax ) { print "PRE ADJUST FASTER\n"; }
-						elsif ( $result <= $premin ) { print "PRE ADJUST SLOWER\n"; }
-						if ( $result >= $premax ) { system "date >> lumilog";system "echo up >> lumilog"; }
-						elsif ( $result <= $premin ) { system "date >> lumilog";system "echo down >> lumilog"; }
-					}
-				}
 			}
 		}
 	}
@@ -126,107 +117,126 @@ while ( 1 )
 	{
 		$target = "z";
 		$result="";
-		$chopdiff = 1;
-		if ( 0 == $chopdiff )
+		$delNext = 0;
+		$threshold = -20000; # FID 85;
+		@results = ();
+		$high = 0;
+		#$max = 0;
+		$total = 0;
+		$target = 10;
+		if ( ! -e "$current.crop.jpg.0" )
 		{
-			$result = `findimagedupes $current $next`;
-		} else {
-			$threshold = -20000; # FID 85;
-			$low = 100;
-			#$max = 0;
-			$total = 0;
-			$target = 10;
-			if ( ! -e "$current.crop.jpg.0" )
-			{
-				`convert -crop 160x120 $current $current.crop.jpg`;
-			}
-			`convert -crop 160x120 $next $next.crop.jpg`;
+			`convert -crop 160x120 $current $current.crop.jpg`;
+		}
+		`convert -crop 160x120 $next $next.crop.jpg`;
+		$i = 5;
+		$end = 10;
+		if ( $pid = fork )
+		{
 			$i = 0;
 			$end = 5;
-			if ( $pid = fork )
-			{
-				$i = 5;
-				$end = 10;
-			}
-			for ( ; $i < $end; $i++ )
-			{
+		}
+		for ( ; $i < $end; $i++ )
+		{
 #				$result = `findimagedupes $current.crop.jpg.$i $next.crop.jpg.$i`;
 #				$metric = "MAE"; # Promising.  Has bush trouble.  Maybe frost issues.
 #				$metric = "MSE"; # Similar.  Maybe better.  Numbers go up with morning frost.  Moderate threshold based on average?
-				$metric = "PSE"; # Pretty darn good at 20k threshold.  Detect on high, so add dash in "seem to be" to negate.
+			$metric = "PSE"; # Pretty darn good at 20k threshold.  Detect on high, so add dash in "seem to be" to negate.
 #				$metric = "PSNR"; # So so.  Fairly good at threshold of 30 but a bit weak at times.
 #				$metric = "RMSE"; # Ok at a threshold of 15, but has a bit of bush issues.
-				$result = `compare -metric $metric $current.crop.jpg.$i $next.crop.jpg.$i /dev/null`;
-				chomp $result;
-				$result =~ s/^\s*(\S+)\s.*/$1/;
-				$result = "seem to be -$result. similar";
+			$result = `compare -metric $metric $current.crop.jpg.$i $next.crop.jpg.$i /dev/null`;
+			chomp $result;
+			$result =~ s/^\s*(\S+)\s.*/$1/;
+			$result = "seem to be -$result. similar";
 
-				if ( $result =~ m/seem to be.*similar/ )
+			if ( $result =~ m/seem to be.*similar/ )
+			{
+				system("chmod 644 $next");
+				$result =~ s/.*seem to be //;
+				$result =~ s/. similar.*//;
+				$result = atoi($result);
+				if ( $pid )
 				{
-					system("chmod 644 $next");
-					$result =~ s/.*seem to be //;
-					$result =~ s/. similar.*//;
-					$result = atoi($result);
-					$total += $result;
-					if ( $low > $result ) { $low = $result; $target = $i; }
-					#if ( $max < $result ) { $max = $result; }
-					#print "res $result\n";
-					#system("xli $current.crop.jpg.$i $next.crop.jpg.$i");
+					push(@results,$result);
+				} else {
+					system "echo $result >> /tmp/indydump/status";
 				}
-				system("rm -f $current.crop.jpg.$i");
+				#if ( $max < $result ) { $max = $result; }
+				#print "res $result\n";
+				#system("xli $current.crop.jpg.$i $next.crop.jpg.$i");
 			}
-			$total /= 5;
-			unless ( $pid )
-			{
-				if ( ($threshold <= $low) && ($delthreshold < $total) ) { $low = $total; $target = "n"; }
-				system "echo $low > /tmp/indydump/status";
-				system "echo $target > /tmp/indydump/target";
-				exit;
-			}
-			system("rm -f $current.crop.jpg.1*");
-			waitpid($pid,0);
-			$result = `cat /tmp/indydump/status`;
-			chomp $result; $result = atoi($result);
-			if ( $low > $result )
-			{
-				$low = $result;
-				$target = `cat /tmp/indydump/target`;
-				chomp $target;
-			}
-#			if ( 80 > $low ) { print "select $next\n"; }
-#			elsif ( 96 < $total ) { print "del $next\n"; $low = $total;}
-			if ( $threshold <= $low)
-			{
-				$total += $result;
-				$total /= 2;
-				if ($delthreshold < $total) { $low = $total; }
-				$target = "n";
-			}
-			#print "$next min $low max $max avg $total\n";
-			#system("xli $current $next");
-			$result = "seem to be $low. similar";
+			system("rm -f $current.crop.jpg.$i");
 		}
-		if ( $result =~ m/seem to be.*similar/ )
+		unless ( $pid )
 		{
-			system("chmod 644 $next");
-			$result =~ s/.*seem to be //;
-			$result =~ s/. similar.*//;
-			$result = atoi($result);
-	print "current $current next $next res $result $target\n";
-			if ( $threshold > $result )
-			{
-				system("touch $next.$result.$target.ndiff");
-				system("chmod 644 $next.$result.$target.ndiff");
-				#system("play ~/media/sounds/clap.wav");
-				#system("play ~/media/sounds/clap.wav");
-				print "tag\n";
-			}
-			if ( ($delthreshold < $prevRes) && ($threshold <= $result) ) {
-				system("rm -f $current");
-			}
-			$current = $next;
-			$prevRes = $result;
+			exit;
 		}
+		system("rm -f $current.crop.jpg.1*");
+		waitpid($pid,0);
+		push(@results, split(/\s/,`cat /tmp/indydump/status`));
+		for ( $i = 0; $i < 10; $i++ )
+		{
+			$result = $results[$i];
+			$average[($avgSet+1)%2][$i] += $result;
+			$deviation = (($result / $average[$avgSet][$i])-1);
+			$total += $deviation;
+			print "\t$i.  $deviation $average[$avgSet][$i]\n";
+			if ( $deviation > $devthreshold )
+			{
+				if ( $high < $deviation ) { $high = $deviation; $target = $i; }
+			}
+		}
+		$avgCount++;
+		if ( $avgSize == $avgCount )
+		{
+			$avgCount = 0;
+			$average[$avgSet][$i] = (0,0,0,0,0,0,0,0,0,0);
+			$avgSet = (($avgSet+1)%2);
+			for ( $i = 0; $i < 10; $i++ )
+			{
+				$average[$avgSet][$i] /= $avgSize;
+			}
+		}
+		system("rm -f /tmp/indydump/status");
+		if ( 0 == $high)
+		{
+			print "No hits.  Total: $total\n";
+			if ((5*$devthreshold) > $total)
+			{
+				print "delNext\n";
+				$delNext = 1;
+			}
+			$streak = 0;
+		} else {
+			system("touch $next.$high.$target.ndiff");
+			system("chmod 644 $next.$high.$target.ndiff");
+			#system("play ~/media/sounds/clap.wav");
+			#system("play ~/media/sounds/clap.wav");
+			print "tag\n";
+			$streak++;
+
+			if ( $streak < 3 )
+			{
+				if ( $streak == 1 ) { $streakl = ""; }
+				$streakl .= "$next.$high.$target.ndiff\n";
+			}
+			elsif ( $streak == 3 )
+			{
+				$streakt = "$current.streak";
+				$streakl .= "$next.$high.$target.ndiff";
+				system("echo \"$streakl\" > $streakt");
+			} elsif ( $streak > 3 ) {
+				system("echo $next.$high.$target.ndiff >> $streakt");
+			}
+		}
+		print "high $high dc $delCurrent\n";
+		if ( ($delCurrent) && (0 == $high) ) {
+			#system("touch $current.$high.$target.del");
+			system("rm -f $current");
+		}
+		$delCurrent = $delNext;
+		$current = $next;
+		$prevRes = $result;
 		$delay = 0;
 	} else {
 		if ( $delay < 10 ) { $delay++; }
