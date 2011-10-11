@@ -1,0 +1,16 @@
+On brenda (SGI Indy with Indycam as camera and NFS server):
+tvilling:/tmp/indydump on /tmp/indydump type nfs (vers=2,rw,dev=100001)
+^^^ not sure if needed
+setindyshutter.sh
+
+On tvilling (image processor and NFS server.  Minimum dual AMD Athlon 2800 MP):
+brenda:/usr/people/mjerde/securitycamout /mnt/floppy nfs rw,addr=192.168.0.11 0 0 (add to fstab)
+sudo mkdir /tmp/indydump -m 777
+cd /tmp/indydump
+sudo ~mjerde/seccam/setownNG.pl &
+scanSecurityCamNG.pl
+
+On edgar (web server):
+sudo mkdir /tmp/indydump
+sudo mount -o rw -t nfs tvilling:/tmp/indydump /tmp/indydump
+
