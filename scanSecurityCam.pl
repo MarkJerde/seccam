@@ -31,20 +31,23 @@
 #   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 $threshold = 93;
+$delthreshold = -10000; # CFID 90; # FID 96;
 $min = 4228.07;
 $max = 36686.4;
 $premin = 11500;
 $premax = 27500;
-$current = "7_19_12_31.jpg";
+$current = "";
 $prevRes = 0;
 $checklumi = 0;
+$delay = 0;
 
 sub atoi
 {
 	$_ = shift();
-	$tab .= "\t";
 	my $e = "";
+	my $neg = 1;
 	if ( s/e(.*)//i ) { $e = $1; }
+	if ( s/^-// ) { $neg = -1; }
 	my $t;
 	$dot = 0;
 	foreach my $d (split(//, $_))
@@ -66,7 +69,7 @@ sub atoi
 			$e--;
 		}
 	}
-	$tab =~ s/.$//;
+	$t *= $neg;
 	return $t;
 }
 
@@ -75,17 +78,17 @@ while ( 1 )
 	$next = "";
 	while ( ! ($current =~ m/\d?\d_\d\d_\d\d_\d\d\.jpg/ ) )
 	{
-		$current = `ls |grep jpg|grep -v diff|grep -v crop|tail -1`;
+		$current = `ls /tmp/indydump|grep jpg|grep -v diff|grep -v crop|tail -1`;
 		chomp($current);
-		$current = $current;
+		$current = "/tmp/indydump/".$current;
 	}
 	while ( ! ($next =~ m/\d?\d_\d\d_\d\d_\d\d\.jpg/ ) )
 	{
 		$currentg = $current;
 		$currentg =~ s/.*\///;
-		$next = `ls |grep jpg|grep -v diff|grep -v crop|grep -A 1 $currentg|tail -1`;
+		$next = `ls /tmp/indydump|grep jpg|grep -v diff|grep -v crop|grep -A 1 $currentg|tail -1`;
 		chomp($next);
-		$next = $next;
+		$next = "/tmp/indydump/".$next;
 
 		if (( ! ($next =~ m/\d?\d_\d\d_\d\d_\d\d\.jpg/ ) )||( $next =~ m/$current/ ))
 		{}
@@ -107,7 +110,7 @@ while ( 1 )
 						else { print "ADJUST SLOWER\n"; }
 						if ( $result >= $max ) { system "date >> lumilog";system "echo way up >> lumilog"; }
 						else { system "date >> lumilog";system "echo way down >> lumilog"; }
-						system("echo rm -f $next");
+						system("rm -f $next");
 						$next = "";
 					} else {
 						if ( $result >= $premax ) { print "PRE ADJUST FASTER\n"; }
@@ -121,35 +124,43 @@ while ( 1 )
 	}
 	if ( ! ( $next =~ m/$current/ ) )
 	{
+		$target = "z";
 		$result="";
 		$chopdiff = 1;
 		if ( 0 == $chopdiff )
 		{
 			$result = `findimagedupes $current $next`;
 		} else {
-			$threshold = 85;
+			$threshold = -20000; # FID 85;
 			$low = 100;
 			#$max = 0;
 			$total = 0;
+			$target = 10;
 			if ( ! -e "$current.crop.jpg.0" )
 			{
 				`convert -crop 160x120 $current $current.crop.jpg`;
 			}
 			`convert -crop 160x120 $next $next.crop.jpg`;
 			$i = 0;
-			$end = 10;
+			$end = 5;
+			if ( $pid = fork )
+			{
+				$i = 5;
+				$end = 10;
+			}
 			for ( ; $i < $end; $i++ )
 			{
-				#$result = `findimagedupes $current.crop.jpg.$i $next.crop.jpg.$i`;
-				$metric = "MAE"; # Promising.  Has bush trouble.  Maybe frost issues.
-				$metric = "MSE"; # Similar.  Maybe better.  Numbers go up with morning frost.  Moderate threshold based on average?
-				$metric = "PSE"; # Pretty darn good at 20k threshold.
-				#$metric = "PSNR"; # So so.  Fairly good at threshold of 30 but a bit weak at times.
-				#$metric = "RMSE"; # Ok at a threshold of 15, but has a bit of bush issues.
+#				$result = `findimagedupes $current.crop.jpg.$i $next.crop.jpg.$i`;
+#				$metric = "MAE"; # Promising.  Has bush trouble.  Maybe frost issues.
+#				$metric = "MSE"; # Similar.  Maybe better.  Numbers go up with morning frost.  Moderate threshold based on average?
+				$metric = "PSE"; # Pretty darn good at 20k threshold.  Detect on high, so add dash in "seem to be" to negate.
+#				$metric = "PSNR"; # So so.  Fairly good at threshold of 30 but a bit weak at times.
+#				$metric = "RMSE"; # Ok at a threshold of 15, but has a bit of bush issues.
 				$result = `compare -metric $metric $current.crop.jpg.$i $next.crop.jpg.$i /dev/null`;
 				chomp $result;
 				$result =~ s/^\s*(\S+)\s.*/$1/;
-			$result = "seem to be $result. similar";
+				$result = "seem to be -$result. similar";
+
 				if ( $result =~ m/seem to be.*similar/ )
 				{
 					system("chmod 644 $next");
@@ -157,24 +168,39 @@ while ( 1 )
 					$result =~ s/. similar.*//;
 					$result = atoi($result);
 					$total += $result;
-					if ( $low > $result ) { $low = $result; }
+					if ( $low > $result ) { $low = $result; $target = $i; }
 					#if ( $max < $result ) { $max = $result; }
 					#print "res $result\n";
 					#system("xli $current.crop.jpg.$i $next.crop.jpg.$i");
 				}
 				system("rm -f $current.crop.jpg.$i");
-				print "$result";
-				if ( ($i+1) % 4 ) { print "\t"; }
-				else { print "\n"; }
 			}
-			system "xli $current $next";
-			$total /= 10;
-			system("rm -f $current.crop.jpg.*");
+			$total /= 5;
+			unless ( $pid )
+			{
+				if ( ($threshold <= $low) && ($delthreshold < $total) ) { $low = $total; $target = "n"; }
+				system "echo $low > /tmp/indydump/status";
+				system "echo $target > /tmp/indydump/target";
+				exit;
+			}
+			system("rm -f $current.crop.jpg.1*");
+			waitpid($pid,0);
+			$result = `cat /tmp/indydump/status`;
+			chomp $result; $result = atoi($result);
+			if ( $low > $result )
+			{
+				$low = $result;
+				$target = `cat /tmp/indydump/target`;
+				chomp $target;
+			}
 #			if ( 80 > $low ) { print "select $next\n"; }
 #			elsif ( 96 < $total ) { print "del $next\n"; $low = $total;}
 			if ( $threshold <= $low)
 			{
-				if (90 < $total) { $low = $total; }
+				$total += $result;
+				$total /= 2;
+				if ($delthreshold < $total) { $low = $total; }
+				$target = "n";
 			}
 			#print "$next min $low max $max avg $total\n";
 			#system("xli $current $next");
@@ -186,20 +212,25 @@ while ( 1 )
 			$result =~ s/.*seem to be //;
 			$result =~ s/. similar.*//;
 			$result = atoi($result);
-	print "current $current next $next res $result\n";
+	print "current $current next $next res $result $target\n";
 			if ( $threshold > $result )
 			{
-				system("touch $next.$result.ndiff");
-				system("chmod 644 $next.$result.ndiff");
+				system("touch $next.$result.$target.ndiff");
+				system("chmod 644 $next.$result.$target.ndiff");
 				#system("play ~/media/sounds/clap.wav");
 				#system("play ~/media/sounds/clap.wav");
 				print "tag\n";
 			}
-			if ( 90 < $prevRes ) {
-				system("echo rm -f $current");
+			if ( ($delthreshold < $prevRes) && ($threshold <= $result) ) {
+				system("rm -f $current");
 			}
 			$current = $next;
 			$prevRes = $result;
 		}
+		$delay = 0;
+	} else {
+		if ( $delay < 10 ) { $delay++; }
+		print "s$delay at $current\n";
+		sleep $delay;
 	}
 }
