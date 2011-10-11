@@ -30,29 +30,52 @@
 #   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 #   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-$count = 0;
+@nfsbug = ("touch /mnt/floppy/that","rm -f /mnt/floppy/that");
+$nbc = 0;
+
+$delay = 1;
 while ( 1 )
 {
-	if ( 0 == $count ) { sleep 10; }
 	print "fetch\n";
 	@files = `ls /mnt/floppy/|grep "rgb\$"`;
 	$count = 0;
 	foreach $file (@files)
 	{
 		chomp $file;
-		if ( $count < 3 )
+		if ( $count < 30 )
 		{
 			system("mv /mnt/floppy/$file .");
+			$file =~ s/-00000.*//;
+			print "$file\n";
+			system("convert $file-00000.rgb $file.jpg;rm -f $file-00000.rgb;chown mjerde:mjerde $file.jpg");
 			$count++;
 		} else {
 			system("rm /mnt/floppy/$file");
 		}
 	}
-	print "convert\n";
-	system("for i in \`ls -l|grep rgb|awk '{print(\$9)}'|awk -F- '{print(\$1)}'\`; do convert \$i-00000.rgb \$i.jpg;rm -f \$i-00000.rgb;chown mjerde:mjerde \$i.jpg;done");
-	print "pwn\n";
-	system("for i in \`ls -l|grep dialout|awk '{print(\$9)}'\`; do chown mjerde:mjerde \$i;done");
-	print "nobody\n";
-	system("for i in \`ls -l|grep nobody|awk '{print(\$9)}'\`; do chown mjerde:mjerde \$i;done");
-	sleep(1);
+	if ( 0 == $count )
+	{
+		###############################################
+		# We didn't get anything, so we should rest.
+		# Increment each consecutive down time up to
+		# a 10 sec delay.
+		###############################################
+
+		if ( 5 > $delay )
+		{
+			###############################################
+			# Poke the NFS to update itself if delay is
+			# still short.  This avoids 30-second dead
+			# windows.
+			###############################################
+			system $nfsbug[$nbc];
+			if ( $nbc ) { $nbc = 0; }
+			else { $nbc = 1; }
+		}
+
+		if ( $delay != 10 ) { $delay++; }
+	}
+	else { $delay = 1; }
+	print "s$delay\n";
+	sleep $delay;
 }
