@@ -1,3 +1,50 @@
+Description:
+-------------------------------------------------------------------------------
+Tooling to provide security camera function using a computer with a camera and a
+computer with the power necessary to process the images.  This software hasn't
+been tested since 2006, and isn't well organized for user-friendly deployment.
+It is reasonable to make it work, though, given a small amount of effort.
+
+Hardware Environment:
+-------------------------------------------------------------------------------
+The original development configuration was a Silicon Graphics Indy workstation
+with Indycam taking the pictures, and a dual AMD Athlon 2800 MP Linux system
+doing the processing, most likely with the help of ImageMagick tools.  The
+resolution of the Indycam was 640x480; of note because this hardware struggled
+to keep up with this load.
+
+Problems Solved:
+-------------------------------------------------------------------------------
+The Indycam posed the problem of needing help to adjust the gain and shutter
+speed to allow usable images from dawn to dusk.  This was addressed with the
+setindyshutter.sh script to tweak these settings every ten seconds.
+
+Configuring an appropriate motion threshold for detection was another challenge.
+Since the camera was looking outside, there was potential for the shadows of
+passing clouds and plants blowing in the wind to create false motion.  To
+address this, and reduce the setup/maintenance time required, the software was
+developed to actively adjust it's sensitivity threashold based on a rolling
+thirty-second average activity level.  At times of calm it would become more
+sensitive and at times of activity it would adjust to what is normal.
+
+The relative size of a human in a 1600 square-foot field of view was another
+hurdle.  In order to avoid requiring a high sensitivity level, the problem was
+changed from a needle in a haystack to a branch in one of many haystacks.  The
+image was divided into sixteen subsections, each with it's own adaptive
+sensitivity.  This also enabled the use of both processors.
+
+While the Indy could take barely more than one photo per second, the AMD Athlon
+2800 MP would struggle to process one image per second.  To remedy this, some of
+the subsections of the image were ignored completely due to it being unlikely
+that those areas would see activity of interest.
+
+To better adapt this software to balance processing capability with an interest
+in analyzing the entire image, it is planned that the software will be extended
+to self-monitor its processing time and employ a pattern of ignored subsections
+to skip partial frames as needed to keep up.
+
+Configuration and Operation:
+-------------------------------------------------------------------------------
 On brenda (SGI Indy with Indycam as camera and NFS server):
 tvilling:/tmp/indydump on /tmp/indydump type nfs (vers=2,rw,dev=100001)
 ^^^ not sure if needed
